@@ -5,8 +5,6 @@ import lightning as L
 from models import DEPTH_MODEL_DICT
 from misc import Silog_loss, compute_metrics
 
-import pdb
-
 
 def normalize_result(value, vmin=None, vmax=None):
     value = value[0, :, :]
