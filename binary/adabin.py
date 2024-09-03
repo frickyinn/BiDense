@@ -21,23 +21,7 @@ class BinaryQuantize(Function):
         k, t = k.cuda(), t.cuda() 
         grad_input = k * t * (1-torch.pow(torch.tanh(input * t), 2)) * grad_output
         return grad_input, None, None
-
-
-class Maxout(nn.Module):
-    '''
-        Nonlinear function
-    '''
-    def __init__(self, channel, neg_init=0.25, pos_init=1.0):
-        super(Maxout, self).__init__()
-        self.neg_scale = nn.Parameter(neg_init*torch.ones(channel))
-        self.pos_scale = nn.Parameter(pos_init*torch.ones(channel))
-        self.relu = nn.ReLU()
     
-    def forward(self, x):
-        # Maxout
-        x = self.pos_scale.view(1,-1,1,1)*self.relu(x) - self.neg_scale.view(1,-1,1,1)*self.relu(-x)
-        return x
-
 
 class BinaryActivation(nn.Module):
     '''
@@ -68,16 +52,30 @@ class BinaryActivation(nn.Module):
         x = (x-self.beta_a)/self.alpha_a
         x = self.gradient_approx(x)
         return self.alpha_a*(x + self.beta_a)
+    
+
+class Maxout(nn.Module):
+    '''
+        Nonlinear function
+    '''
+    def __init__(self, channel, neg_init=0.25, pos_init=1.0):
+        super(Maxout, self).__init__()
+        self.neg_scale = nn.Parameter(neg_init*torch.ones(channel))
+        self.pos_scale = nn.Parameter(pos_init*torch.ones(channel))
+        self.relu = nn.ReLU()
+    
+    def forward(self, x):
+        # Maxout
+        x = self.pos_scale.view(1,-1,1,1)*self.relu(x) - self.neg_scale.view(1,-1,1,1)*self.relu(-x)
+        return x
 
 
-class AdaBin_Conv2d(nn.Conv2d):
+class AdaBinConv2d(nn.Conv2d):
     '''
         AdaBin Convolution
     '''
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False, a_bit=1, w_bit=1):
-        super(AdaBin_Conv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
-        self.a_bit = a_bit
-        self.w_bit = w_bit
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=False):
+        super(AdaBinConv2d, self).__init__(in_channels, out_channels, kernel_size, stride, padding, dilation, groups, bias)
         self.k = torch.tensor([10]).float().cpu()
         self.t = torch.tensor([0.1]).float().cpu() 
         self.binary_a = BinaryActivation()
@@ -85,21 +83,16 @@ class AdaBin_Conv2d(nn.Conv2d):
         self.filter_size = self.kernel_size[0]*self.kernel_size[1]*self.in_channels
 
     def forward(self, inputs):
-        if self.a_bit==1:
-            inputs = self.binary_a(inputs) 
+        inputs = self.binary_a(inputs) 
 
-        if self.w_bit==1:
-            w = self.weight 
-            beta_w = w.mean((1,2,3)).view(-1,1,1,1)
-            alpha_w = torch.sqrt(((w-beta_w)**2).sum((1,2,3))/self.filter_size).view(-1,1,1,1)
+        w = self.weight 
+        beta_w = w.mean((1,2,3)).view(-1,1,1,1)
+        alpha_w = torch.sqrt(((w-beta_w)**2).sum((1,2,3))/self.filter_size).view(-1,1,1,1)
 
-            w = (w - beta_w)/alpha_w 
-            wb = BinaryQuantize().apply(w, self.k, self.t)
-            weight = wb * alpha_w + beta_w
-        else: 
-            weight = self.weight
+        w = (w - beta_w)/alpha_w 
+        wb = BinaryQuantize().apply(w, self.k, self.t)
+        weight = wb * alpha_w + beta_w
         
         output = F.conv2d(inputs, weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
 
         return output
-    

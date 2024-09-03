@@ -59,7 +59,7 @@ def main(args):
     latest_checkpoint_callback = ModelCheckpoint()
     best_checkpoint_callback = ModelCheckpoint(monitor='valid/d1', mode='max')
     
-    devices = [int(x) for x in args.gpus]
+    devices = [int(x) for x in args.gpus.split(',')]
     accumulate_grad_batches = max(1, config.TRAINING.BATCH_SIZE // config.TRAINING.BATCH_SIZE_ON_1_GPU // len(devices))
 
     trainer = L.Trainer(
@@ -77,10 +77,11 @@ def main(args):
     
     trainer.fit(depth_trainer, train_dataloader, valid_dataloader, ckpt_path=args.resume)
 
+
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='.yaml configure file path')
-    parser.add_argument('--gpus', type=list, default=[0, 1])
+    parser.add_argument('--gpus', type=str, default='0,1')
     parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--weights', type=str, default=None)
 

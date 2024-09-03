@@ -13,9 +13,30 @@ class LearnableBias(nn.Module):
         return out
 
 
-class ReActConv2d(nn.Conv2d):
+class PeriodicBinarizer(nn.Module):
+    def __init__(self, out_chn):
+        super(PeriodicBinarizer, self).__init__()
+        self.alpha = nn.Parameter(torch.ones(1), requires_grad=True)
+        self.epsilon = nn.Parameter(torch.zeros(1, out_chn, 1, 1), requires_grad=True)
+        self.tau = nn.Parameter(torch.ones(1, out_chn, 1, 1), requires_grad=True)
+        self.A = nn.Parameter(torch.ones(1, out_chn, 1, 1), requires_grad=True)
+
+    def forward(self, x):
+        x = (x - self.epsilon.expand_as(x)) / self.tau.expand_as(x) * torch.pi
+        x = torch.sin(x)
+
+        binary_activation_no_grad = torch.sign(x)
+        tanh_activation = torch.tanh(x * self.alpha)
+        
+        out = binary_activation_no_grad.detach() - tanh_activation.detach() + tanh_activation
+        out = out * self.A.expand_as(x)
+
+        return out
+    
+
+class BinaryWeightConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False):
-        super(ReActConv2d, self).__init__(
+        super(BinaryWeightConv2d, self).__init__(
             in_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -25,21 +46,9 @@ class ReActConv2d(nn.Conv2d):
             groups=groups,
             bias=bias,
         )
-        self.move = LearnableBias(in_channels)
         nn.init.normal_(self.weight, std=1e-3)
 
     def forward(self, x):
-        x = self.move(x)
-
-        out_forward = torch.sign(x)
-        mask1 = x < -1
-        mask2 = x < 0
-        mask3 = x < 1
-        out1 = (-1) * mask1.type(torch.float32) + (x*x + 2*x) * (1-mask1.type(torch.float32))
-        out2 = out1 * mask2.type(torch.float32) + (-x*x + 2*x) * (1-mask2.type(torch.float32))
-        out3 = out2 * mask3.type(torch.float32) + 1 * (1- mask3.type(torch.float32))
-        x = out_forward.detach() - out3.detach() + out3
-
         real_weights = self.weight
         scaling_factor = torch.mean(torch.mean(torch.mean(abs(real_weights),dim=3,keepdim=True),dim=2,keepdim=True),dim=1,keepdim=True)
         scaling_factor = scaling_factor.detach()
@@ -69,10 +78,11 @@ def channel_adaptive_bypass(x: torch.Tensor, out_ch: int):
     return out
 
 
-class CFBConv2d(nn.Module):
+class BiDenseConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False, bypass=True):
-        super(CFBConv2d, self).__init__()
-        self.conv = ReActConv2d(
+        super(BiDenseConv2d, self).__init__()
+        self.binarizer = PeriodicBinarizer(in_channels)
+        self.conv = BinaryWeightConv2d(
             in_channels,
             out_channels,
             kernel_size=kernel_size,
@@ -88,6 +98,7 @@ class CFBConv2d(nn.Module):
     
     def forward(self, x):
         input = x
+        x = self.binarizer(x)
         x = self.conv(x)
         x = self.norm(x)
         if self.bypass:
