@@ -1,0 +1,3 @@
+from .upernet import UperNetDepthModel, UperNetSegmentationModel
+from .bnn_upernet import BnnUperNetDepthModel, BnnUperNetSegmentationModel
+from .react_upernet import ReActUperNetDepthModel, ReActUperNetSegmentationModel

@@ -1,0 +1,56 @@
+from yacs.config import CfgNode as CN
+
+
+_CN = CN()
+
+# Dataset
+_CN.DATASET = CN()
+_CN.DATASET.DATASET = None
+_CN.DATASET.DATA_PATH = None
+_CN.DATASET.GT_PATH = None
+_CN.DATASET.FILENAMES_FILE = None
+_CN.DATASET.DATA_PATH_EVAL = None
+_CN.DATASET.GT_PATH_EVAL = None
+_CN.DATASET.FILENAMES_FILE_EVAL = None
+_CN.DATASET.INPUT_HEIGHT = 480
+_CN.DATASET.INPUT_WIDTH = 640
+
+# Preprocessing
+_CN.PREPROCESSING = CN()
+_CN.PREPROCESSING.DO_RANDOM_ROTATE = False
+_CN.PREPROCESSING.DEGREE = 2.5
+_CN.PREPROCESSING.DO_KB_CROP = False
+_CN.PREPROCESSING.USE_RIGHT = False
+
+# Training
+_CN.TRAINING = CN()
+_CN.TRAINING.NUM_THREADS = 1
+_CN.TRAINING.BATCH_SIZE = 128
+_CN.TRAINING.BATCH_SIZE_ON_1_GPU = 8
+_CN.TRAINING.NUM_EPOCHS = 50
+_CN.TRAINING.VARIANCE_FOCUS = 0.85
+_CN.TRAINING.MAX_LR = None
+
+# Online eval
+_CN.ONLINE_EVAL = CN()
+_CN.ONLINE_EVAL.DO_ONLINE_EVAL = True
+_CN.ONLINE_EVAL.MIN_DEPTH_EVAL = 1e-3
+_CN.ONLINE_EVAL.MAX_DEPTH_EVAL = 80
+_CN.ONLINE_EVAL.EIGEN_CROP = False
+_CN.ONLINE_EVAL.GARG_CROP = False
+_CN.ONLINE_EVAL.EVAL_FREQ = 1
+
+# Model
+_CN.MODEL = CN()
+_CN.MODEL.MODEL_TYPE = None
+_CN.MODEL.BINARY_TYPE = None
+_CN.MODEL.MAX_DEPTH = 10
+
+_CN.RANDOM_SEED = 1
+
+
+def get_cfg_defaults():
+    """Get a yacs CfgNode object with default values for my_project."""
+    # Return a clone so that the defaults will not be altered
+    # This is for the "local variable" use pattern
+    return _CN.clone()

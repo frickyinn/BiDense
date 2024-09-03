@@ -1,0 +1,33 @@
+DATASET:
+  DATASET: 'nyu'
+  DATA_PATH: '../dataset/nyu_depth_v2/sync/'
+  GT_PATH: '../dataset/nyu_depth_v2/sync/'
+  FILENAMES_FILE: 'train_test_inputs/nyudepthv2_train_files_with_gt.txt'
+  DATA_PATH_EVAL: '../dataset/nyu_depth_v2/official_splits/test/'
+  GT_PATH_EVAL: '../dataset/nyu_depth_v2/official_splits/test/'
+  FILENAMES_FILE_EVAL: 'train_test_inputs/nyudepthv2_test_files_with_gt.txt'
+
+  INPUT_HEIGHT: 416
+  INPUT_WIDTH: 544
+
+PREPROCESSING:
+  DO_RANDOM_ROTATE: True
+  DEGREE: 2.5
+
+TRAINING:
+  NUM_THREADS: 16
+  BATCH_SIZE: 128
+  BATCH_SIZE_ON_1_GPU: 8
+  NUM_EPOCHS: 50
+  MAX_LR: 1e-4
+
+ONLINE_EVAL:
+  MIN_DEPTH_EVAL: 1e-3
+  MAX_DEPTH_EVAL: 10
+  GARG_CROP: False
+  EIGEN_CROP: True
+
+MODEL:
+  MODEL_TYPE: 'upernet'
+  BINARY_TYPE: 'react'
+  MAX_DEPTH: 10
