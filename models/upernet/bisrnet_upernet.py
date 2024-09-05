@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from binary.adabin import AdaBinConv2d, Maxout
-from .backbones.adabin_convnext import get_convnext
+from binary.bisrnet import BiSRConv2d, LearnableBias
+from .backbones.bisrnet_convnext import get_convnext
 
 
 def up_and_add(x, y):
@@ -18,18 +18,20 @@ class PSPModule(nn.Module):
         out_channels = in_channels // len(bin_sizes)
         self.stages = nn.ModuleList([self._make_stages(in_channels, out_channels, b_s) for b_s in bin_sizes])
         self.bottleneck = nn.Sequential(
-            AdaBinConv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
+            BiSRConv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(out_channel if out_channel else in_channels),
-            Maxout(out_channel if out_channel else in_channels),
+            LearnableBias(out_channel if out_channel else in_channels),
+            nn.PReLU(out_channel if out_channel else in_channels),
             nn.Dropout2d(0.1)
         )
 
     def _make_stages(self, in_channels, out_channels, bin_sz):
         prior = nn.AdaptiveAvgPool2d(output_size=bin_sz)
-        conv = AdaBinConv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        conv = BiSRConv2d(in_channels, out_channels, kernel_size=1, bias=False)
         bn = nn.BatchNorm2d(out_channels)
-        prelu = Maxout(out_channels)
-        return nn.Sequential(prior, conv, bn, prelu)
+        move = LearnableBias(out_channels)
+        prelu = nn.PReLU(out_channels)
+        return nn.Sequential(prior, conv, bn, move, prelu)
 
     def forward(self, features):
         h, w = features.size()[2], features.size()[3]
@@ -44,17 +46,19 @@ class FPN_fuse(nn.Module):
         super(FPN_fuse, self).__init__()
         assert feature_channels[0] == fpn_out
         self.conv1x1 = nn.ModuleList([nn.Sequential(
-            AdaBinConv2d(ft_size, fpn_out, kernel_size=1),
+            BiSRConv2d(ft_size, fpn_out, kernel_size=1),
             nn.BatchNorm2d(fpn_out),
         ) for ft_size in feature_channels[1:]])
         self.smooth_conv = nn.ModuleList([nn.Sequential(
-            AdaBinConv2d(fpn_out, fpn_out, kernel_size=3, padding=1),
+            BiSRConv2d(fpn_out, fpn_out, kernel_size=3, padding=1),
             nn.BatchNorm2d(fpn_out),
         )] * (len(feature_channels) - 1))
         self.conv_fusion = nn.Sequential(
-            AdaBinConv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
+            BiSRConv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(fpn_out),
-            Maxout(fpn_out),
+            LearnableBias(fpn_out),
+            nn.PReLU(fpn_out),
+            LearnableBias(fpn_out),
         )
 
     def forward(self, features):
@@ -101,7 +105,7 @@ class UperNet(nn.Module):
         return x
 
 
-class AdaBinUperNetDepthModel(UperNet):
+class BiSRUperNetDepthModel(UperNet):
     def __init__(self, max_depth, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
@@ -122,7 +126,7 @@ class AdaBinUperNetDepthModel(UperNet):
         return depth
 
 
-class AdaBinUperNetSegmentationModel(UperNet):
+class BiSRUperNetSegmentationModel(UperNet):
     def __init__(self, num_classes, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256

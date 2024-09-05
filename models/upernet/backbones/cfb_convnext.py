@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from timm.models.layers import DropPath
 
-from binary.cfb import CFBConv2d, LearnableBias
+from binary.cfb import CFBConv2d, LearnableBias, channel_adaptive_bypass
 
 
 class Block(nn.Module):
@@ -14,16 +14,16 @@ class Block(nn.Module):
         self.move = LearnableBias(4 * dim)
         self.act = nn.PReLU(4 * dim)
         self.pwconv2 = CFBConv2d(4 * dim, dim, kernel_size=1, stride=1)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        # self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
     def forward(self, x):
-        input = x
+        # input = x
         x = self.dwconv(x)
         x = self.pwconv1(x)
         x = self.move(x)
         x = self.act(x)
         x = self.pwconv2(x)
-        x = input + self.drop_path(x)
+        # x = input + self.drop_path(x)
         return x
     
 
@@ -32,9 +32,10 @@ class Transition(nn.Module):
         super(Transition, self).__init__()
         self.conv = CFBConv2d(in_channels, out_channels, kernel_size=2, stride=2, bypass=False)
         self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2)
+        self.out_channels = out_channels
 
     def forward(self, x):
-        return self.conv(x) + self.avgpool(x)
+        return self.conv(x) + channel_adaptive_bypass(self.avgpool(x), self.out_channels)
 
 
 class ConvNeXt(nn.Module):

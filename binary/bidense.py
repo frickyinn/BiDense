@@ -22,7 +22,7 @@ class PeriodicBinarizer(nn.Module):
         self.A = nn.Parameter(torch.ones(1, out_chn, 1, 1), requires_grad=True)
 
     def forward(self, x):
-        x = (x - self.epsilon.expand_as(x)) / self.tau.expand_as(x) * torch.pi
+        x = (x - self.epsilon.expand_as(x)) / self.tau.expand_as(x) * 2 * torch.pi
         x = torch.sin(x)
 
         binary_activation_no_grad = torch.sign(x)

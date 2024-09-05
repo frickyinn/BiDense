@@ -38,7 +38,7 @@ class PSPModule(nn.Module):
         pyramids.extend([F.interpolate(stage(features), size=(h, w), mode='bilinear', align_corners=True) for stage in self.stages])
         output = self.bottleneck(torch.cat(pyramids, dim=1))
         return output
-    
+     
 
 class FPN_fuse(nn.Module):
     def __init__(self, feature_channels=[256, 512, 1024, 2048], fpn_out=256):
@@ -56,7 +56,7 @@ class FPN_fuse(nn.Module):
     def forward(self, features):
         features[1:] = [conv1x1(feature) for feature, conv1x1 in zip(features[1:], self.conv1x1)]
         P = [up_and_add(features[i], features[i - 1]) for i in reversed(range(1, len(features)))]
-        P = [x + smooth_conv(x) for smooth_conv, x in zip(self.smooth_conv, P)]
+        P = [smooth_conv(x) for smooth_conv, x in zip(self.smooth_conv, P)]
         P = list(reversed(P))
         P.append(features[-1])  # P = [P1, P2, P3, P4]
         H, W = P[0].size(2), P[0].size(3)
@@ -97,7 +97,7 @@ class UperNet(nn.Module):
         return x
 
 
-class ReActUperNetDepthModel(UperNet):
+class BiDenseUperNetDepthModel(UperNet):
     def __init__(self, max_depth, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
@@ -118,7 +118,7 @@ class ReActUperNetDepthModel(UperNet):
         return depth
 
 
-class ReActUperNetSegmentationModel(UperNet):
+class BiDenseUperNetSegmentationModel(UperNet):
     def __init__(self, num_classes, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
