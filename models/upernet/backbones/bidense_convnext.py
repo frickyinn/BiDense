@@ -10,11 +10,11 @@ from binary.cfb import CFBConv2d
 class Block(nn.Module):
     def __init__(self, dim, drop_path=0.):
         super().__init__()
-        self.dwconv = CFBConv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
-        self.pwconv1 = CFBConv2d(dim, 4 * dim, kernel_size=1, stride=1)
+        self.dwconv = BiDenseConv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
+        self.pwconv1 = BiDenseConv2d(dim, 4 * dim, kernel_size=1, stride=1)
         self.move = LearnableBias(4 * dim)
         self.act = nn.PReLU(4 * dim)
-        self.pwconv2 = CFBConv2d(4 * dim, dim, kernel_size=1, stride=1)
+        self.pwconv2 = BiDenseConv2d(4 * dim, dim, kernel_size=1, stride=1)
         # self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
 
     def forward(self, x):
@@ -31,7 +31,7 @@ class Block(nn.Module):
 class Transition(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Transition, self).__init__()
-        self.conv = CFBConv2d(in_channels, out_channels, kernel_size=2, stride=2, bypass=False)
+        self.conv = BiDenseConv2d(in_channels, out_channels, kernel_size=2, stride=2, bypass=False)
         self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2)
         self.out_channels = out_channels
 
