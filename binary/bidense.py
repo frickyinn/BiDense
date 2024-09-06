@@ -41,21 +41,20 @@ class ApproxSignBinarizer(nn.Module):
 
 
 class Gate(nn.Module):
-    def __init__(self, n_emb=32):
+    def __init__(self, num_embeddings=32, gamma=1):
         super(Gate, self).__init__()
-        self.n_emb = n_emb
+        self.num_embeddings = num_embeddings
+        self.gamma = gamma
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         # self.to_alpha = nn.Embedding(2 * hidden_dim + 1, 1)
-        self.to_beta =  nn.Embedding(n_emb, 1)
+        self.to_beta =  nn.Embedding(num_embeddings, 1)
         nn.init.constant_(self.to_beta.weight, 0)
 
     def forward(self, x):
-        # import pdb
-        # pdb.set_trace()
         b, c, _, _ = x.size()
         with torch.no_grad():
             x = self.avg_pool(x).view(b, c)
-            x = torch.tanh(x)
+            x = torch.tanh(self.gamma * x)
             x = (x + 1) / 2 * (self.n_emb - 1)
             x = x.int()
 
@@ -110,7 +109,7 @@ def channel_adaptive_bypass(x: torch.Tensor, out_ch: int):
 class BiDenseConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False, bypass=True):
         super(BiDenseConv2d, self).__init__()
-        self.gate = Gate(in_channels)
+        self.gate = Gate()
         self.binarizer = ApproxSignBinarizer()
         self.conv = BinaryWeightConv2d(
             in_channels,
