@@ -13,9 +13,9 @@ class LearnableBias(nn.Module):
         return out
     
 
-class LearnableBias1d(nn.Module):
+class LearnableBias1D(nn.Module):
     def __init__(self, out_channels):
-        super(LearnableBias1d, self).__init__()
+        super(LearnableBias1D, self).__init__()
         self.bias = nn.Parameter(torch.zeros(1, out_channels), requires_grad=True)
 
     def forward(self, x):
@@ -38,62 +38,29 @@ class ApproxSignBinarizer(nn.Module):
         x = out_forward.detach() - out3.detach() + out3
 
         return x
-    
 
-class ReActLinear(nn.Linear):
-    def __init__(self, in_channels, out_channels, bias=True):
-        super(ReActLinear, self).__init__(
-            in_channels,
-            out_channels,
-            bias=bias,
-        )
-        self.move = LearnableBias1d(in_channels)
-        self.binarizer = ApproxSignBinarizer()
-        nn.init.normal_(self.weight, std=1e-3)
-
-    def forward(self, x):
-        x = self.move(x)
-        x = self.binarizer(x)
-
-        real_weights = self.weight
-        scaling_factor = torch.mean(abs(real_weights),dim=1,keepdim=True)
-        scaling_factor = scaling_factor.detach()
-        binary_weights_no_grad = scaling_factor * torch.sign(real_weights)
-        cliped_weights = torch.clamp(real_weights, -1.0, 1.0)
-        binary_weights = binary_weights_no_grad.detach() - cliped_weights.detach() + cliped_weights
-        y = F.linear(x, binary_weights, self.bias)
-
-        return y
-    
 
 class Gate(nn.Module):
-    def __init__(self, dim, reduction=1):
+    def __init__(self, n_emb=32):
         super(Gate, self).__init__()
-        hidden_dim = dim // reduction
+        self.n_emb = n_emb
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.fc = nn.Sequential(
-            ReActLinear(dim, hidden_dim, bias=False),
-            nn.BatchNorm1d(hidden_dim),
-            LearnableBias1d(hidden_dim),
-            nn.PReLU(hidden_dim),
-        )
-        # self.to_alpha = nn.Sequential(
-        #     ReActLinear(hidden_dim, dim, bias=False),
-        #     LearnableBias1d(dim),
-        #     nn.ReLU(),
-        # )
-        self.to_beta =  ReActLinear(hidden_dim, dim, bias=False)
-        nn.init.normal_(self.to_beta.weight, std=1e-7)
+        # self.to_alpha = nn.Embedding(2 * hidden_dim + 1, 1)
+        self.to_beta =  nn.Embedding(n_emb, 1)
+        nn.init.constant_(self.to_beta.weight, 0)
 
     def forward(self, x):
+        # import pdb
+        # pdb.set_trace()
         b, c, _, _ = x.size()
-        x = self.avg_pool(x).view(b, c)
-        x = self.fc(x)
-        # alpha, beta = self.to_alpha(x), self.to_beta(x)
-        # return alpha.view(b, c, 1, 1), beta.view(b, c, 1, 1)
-    
-        beta = self.to_beta(x)
-        return beta.view(b, c, 1, 1)
+        with torch.no_grad():
+            x = self.avg_pool(x).view(b, c)
+            x = torch.tanh(x)
+            x = (x + 1) / 2 * (self.n_emb - 1)
+            x = x.int()
+
+        beta = self.to_beta(x).view(b, c, 1, 1)
+        return beta
     
 
 class BinaryWeightConv2d(nn.Conv2d):

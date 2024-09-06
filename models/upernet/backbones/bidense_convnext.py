@@ -31,7 +31,7 @@ class Block(nn.Module):
 class Transition(nn.Module):
     def __init__(self, in_channels, out_channels):
         super(Transition, self).__init__()
-        self.conv = BiDenseConv2d(in_channels, out_channels, kernel_size=2, stride=2, bypass=False)
+        self.conv = CFBConv2d(in_channels, out_channels, kernel_size=2, stride=2, bypass=False)
         self.avgpool = nn.AvgPool2d(kernel_size=2, stride=2)
         self.out_channels = out_channels
 
