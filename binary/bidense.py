@@ -40,26 +40,39 @@ class ApproxSignBinarizer(nn.Module):
         return x
 
 
+# class Gate(nn.Module):
+#     def __init__(self, num_embeddings=32, gamma=1):
+#         super(Gate, self).__init__()
+#         self.num_embeddings = num_embeddings
+#         self.gamma = gamma
+#         self.avg_pool = nn.AdaptiveAvgPool2d(1)
+#         # self.to_alpha = nn.Embedding(2 * hidden_dim + 1, 1)
+#         self.to_beta =  nn.Embedding(num_embeddings, 1)
+#         nn.init.constant_(self.to_beta.weight, 0)
+
+#     def forward(self, x):
+#         b, c, _, _ = x.size()
+#         with torch.no_grad():
+#             x = self.avg_pool(x).view(b, c)
+#             x = torch.tanh(self.gamma * x)
+#             x = (x + 1) / 2 * (self.n_emb - 1)
+#             x = x.int()
+
+#         beta = self.to_beta(x).view(b, c, 1, 1)
+#         return beta
+    
+
 class Gate(nn.Module):
-    def __init__(self, num_embeddings=32, gamma=1):
+    def __init__(self, dim):
         super(Gate, self).__init__()
-        self.num_embeddings = num_embeddings
-        self.gamma = gamma
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        # self.to_alpha = nn.Embedding(2 * hidden_dim + 1, 1)
-        self.to_beta =  nn.Embedding(num_embeddings, 1)
-        nn.init.constant_(self.to_beta.weight, 0)
+        # self.to_beta =  nn.Embedding(num_embeddings, 1)
+        self.k = nn.Parameter(torch.ones(1, dim, 1, 1) * 1e-3, requires_grad=True)
+        self.b = nn.Parameter(torch.zeros(1, dim, 1, 1), requires_grad=True)
 
     def forward(self, x):
-        b, c, _, _ = x.size()
-        with torch.no_grad():
-            x = self.avg_pool(x).view(b, c)
-            x = torch.tanh(self.gamma * x)
-            x = (x + 1) / 2 * (self.n_emb - 1)
-            x = x.int()
-
-        beta = self.to_beta(x).view(b, c, 1, 1)
-        return beta
+        x = self.avg_pool(x)
+        return self.k * x + self.b
     
 
 class BinaryWeightConv2d(nn.Conv2d):
@@ -109,7 +122,7 @@ def channel_adaptive_bypass(x: torch.Tensor, out_ch: int):
 class BiDenseConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False, bypass=True):
         super(BiDenseConv2d, self).__init__()
-        self.gate = Gate()
+        self.gate = Gate(in_channels)
         self.binarizer = ApproxSignBinarizer()
         self.conv = BinaryWeightConv2d(
             in_channels,
