@@ -25,3 +25,20 @@ DEPTH_MODEL_DICT = {
         'bidense': BiDenseUperNetDepthModel,
     },
 }
+
+
+SEGMENTATION_MODEL_DICT = {
+    'dpt': {
+        'fp32': DPTSegmentationModel,
+    },
+
+    'upernet': {
+        'fp32': UperNetSegmentationModel,
+        'bnn': BnnUperNetSegmentationModel,
+        'react': ReActUperNetSegmentationModel,
+        'adabin': AdaBinUperNetSegmentationModel,
+        'bisrnet': BiSRUperNetSegmentationModel,
+        'cfb': CFBUperNetSegmentationModel,
+        'bidense': BiDenseUperNetSegmentationModel,
+    },
+}

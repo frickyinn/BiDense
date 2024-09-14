@@ -23,6 +23,18 @@ class LearnableBias1D(nn.Module):
         return out
 
 
+# class ValueAdaptiveBias(nn.Module):
+#     def __init__(self, dim):
+#         super(ValueAdaptiveBias, self).__init__()
+#         self.avg_pool = nn.AdaptiveAvgPool2d(1)
+#         self.k = nn.Parameter(torch.randn(1, dim, 1, 1) * 1e-3, requires_grad=True)
+#         self.b = nn.Parameter(torch.zeros(1, dim, 1, 1), requires_grad=True)
+
+#     def forward(self, x):
+#         x = x - (self.k * self.avg_pool(x.detach()) + self.b)
+#         return x
+
+
 class ApproxSignBinarizer(nn.Module):
     def __init__(self):
         super(ApproxSignBinarizer, self).__init__()
@@ -37,43 +49,24 @@ class ApproxSignBinarizer(nn.Module):
         out3 = out2 * mask3.type(torch.float32) + 1 * (1- mask3.type(torch.float32))
         x = out_forward.detach() - out3.detach() + out3
 
-        return x
-
-
-# class Gate(nn.Module):
-#     def __init__(self, num_embeddings=32, gamma=1):
-#         super(Gate, self).__init__()
-#         self.num_embeddings = num_embeddings
-#         self.gamma = gamma
-#         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-#         # self.to_alpha = nn.Embedding(2 * hidden_dim + 1, 1)
-#         self.to_beta =  nn.Embedding(num_embeddings, 1)
-#         nn.init.constant_(self.to_beta.weight, 0)
-
-#     def forward(self, x):
-#         b, c, _, _ = x.size()
-#         with torch.no_grad():
-#             x = self.avg_pool(x).view(b, c)
-#             x = torch.tanh(self.gamma * x)
-#             x = (x + 1) / 2 * (self.n_emb - 1)
-#             x = x.int()
-
-#         beta = self.to_beta(x).view(b, c, 1, 1)
-#         return beta
+        return x    
     
 
-class Gate(nn.Module):
+class ValueAdaptiveBinarizer(nn.Module):
     def __init__(self, dim):
-        super(Gate, self).__init__()
+        super(ValueAdaptiveBinarizer, self).__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        # self.to_beta =  nn.Embedding(num_embeddings, 1)
-        self.k = nn.Parameter(torch.ones(1, dim, 1, 1) * 1e-3, requires_grad=True)
+        self.alpha = nn.Parameter(torch.randn(1, dim, 1, 1) * 1e-3, requires_grad=True)
+        self.k = nn.Parameter(torch.randn(1, dim, 1, 1) * 1e-3, requires_grad=True)
         self.b = nn.Parameter(torch.zeros(1, dim, 1, 1), requires_grad=True)
 
+        self.binarizer = ApproxSignBinarizer()
+
     def forward(self, x):
-        x = self.avg_pool(x)
-        return self.k * x + self.b
-    
+        x = x - (self.k * self.avg_pool(x.detach()) + self.b)
+        x = torch.exp(self.alpha * self.avg_pool(x.detach().abs())) * self.binarizer(x)
+        return x
+
 
 class BinaryWeightConv2d(nn.Conv2d):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False):
@@ -122,8 +115,7 @@ def channel_adaptive_bypass(x: torch.Tensor, out_ch: int):
 class BiDenseConv2d(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=0, dilation=1, groups=1, bias=False, bypass=True):
         super(BiDenseConv2d, self).__init__()
-        self.gate = Gate(in_channels)
-        self.binarizer = ApproxSignBinarizer()
+        self.binarizer = ValueAdaptiveBinarizer(in_channels)
         self.conv = BinaryWeightConv2d(
             in_channels,
             out_channels,
@@ -140,8 +132,7 @@ class BiDenseConv2d(nn.Module):
     
     def forward(self, x):
         input = x
-        b = self.gate(x)
-        x = self.binarizer(x + b)
+        x = self.binarizer(x)
         x = self.conv(x)
         x = self.norm(x)
         if self.bypass:

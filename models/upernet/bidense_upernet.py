@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from binary.cfb import CFBConv2d
 from binary.bidense import BiDenseConv2d, LearnableBias
 from .backbones.bidense_convnext import get_convnext
 
@@ -19,7 +18,7 @@ class PSPModule(nn.Module):
         out_channels = in_channels // len(bin_sizes)
         self.stages = nn.ModuleList([self._make_stages(in_channels, out_channels, b_s) for b_s in bin_sizes])
         self.bottleneck = nn.Sequential(
-            CFBConv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
+            BiDenseConv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
             LearnableBias(out_channel if out_channel else in_channels),
             nn.PReLU(out_channel if out_channel else in_channels),
             nn.Dropout2d(0.1)
@@ -27,7 +26,7 @@ class PSPModule(nn.Module):
 
     def _make_stages(self, in_channels, out_channels, bin_sz):
         prior = nn.AdaptiveAvgPool2d(output_size=bin_sz)
-        conv = CFBConv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        conv = BiDenseConv2d(in_channels, out_channels, kernel_size=1, bias=False)
         move = LearnableBias(out_channels)
         prelu = nn.PReLU(out_channels)
         return nn.Sequential(prior, conv, move, prelu)
@@ -44,10 +43,10 @@ class FPN_fuse(nn.Module):
     def __init__(self, feature_channels=[256, 512, 1024, 2048], fpn_out=256):
         super(FPN_fuse, self).__init__()
         assert feature_channels[0] == fpn_out
-        self.conv1x1 = nn.ModuleList([CFBConv2d(ft_size, fpn_out, kernel_size=1) for ft_size in feature_channels[1:]])
-        self.smooth_conv = nn.ModuleList([CFBConv2d(fpn_out, fpn_out, kernel_size=3, padding=1)] * (len(feature_channels) - 1))
+        self.conv1x1 = nn.ModuleList([BiDenseConv2d(ft_size, fpn_out, kernel_size=1) for ft_size in feature_channels[1:]])
+        self.smooth_conv = nn.ModuleList([BiDenseConv2d(fpn_out, fpn_out, kernel_size=3, padding=1)] * (len(feature_channels) - 1))
         self.conv_fusion = nn.Sequential(
-            CFBConv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
+            BiDenseConv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
             LearnableBias(fpn_out),
             nn.PReLU(fpn_out),
             LearnableBias(fpn_out),

@@ -1,0 +1,15 @@
+DATASET:
+  DATASET: 'ade20k'
+  DATA_PATH: '../dataset/nyu_depth_v2/sync/'
+
+TRAINING:
+  NUM_THREADS: 16
+  BATCH_SIZE: 32
+  BATCH_SIZE_ON_1_GPU: 8
+  NUM_EPOCHS: 50
+  MAX_LR: 6e-5
+
+MODEL:
+  MODEL_TYPE: 'upernet'
+  BINARY_TYPE: 'fp32'
+  NUM_CLASSES: 150

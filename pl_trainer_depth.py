@@ -1,29 +1,8 @@
 import torch
-from torchvision import transforms
 import lightning as L
 
 from models import DEPTH_MODEL_DICT
-from misc import Silog_loss, compute_metrics
-
-
-def normalize_result(value, vmin=None, vmax=None):
-    value = value[0, :, :]
-
-    vmin = value.min() if vmin is None else vmin
-    vmax = value.max() if vmax is None else vmax
-
-    if vmin != vmax:
-        value = (value - vmin) / (vmax - vmin)
-    else:
-        value = value * 0.
-
-    return value.unsqueeze(0)
-
-
-inv_normalize = transforms.Normalize(
-    mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225],
-    std=[1/0.229, 1/0.224, 1/0.225]
-)
+from misc import inv_normalize, normalize_depth_result, Silog_loss, compute_depth_metrics
 
 
 class PL_DepthTrainer(L.LightningModule):
@@ -82,7 +61,7 @@ class PL_DepthTrainer(L.LightningModule):
             mask = depth_gt > 1.0
         
         loss = self.criterion(depth_est, depth_gt, mask.bool())
-        silog, abs_rel, log10, rms, sq_rel, log_rms, d1, d2, d3 = compute_metrics(
+        silog, abs_rel, log10, rms, sq_rel, log_rms, d1, d2, d3 = compute_depth_metrics(
             depth_gt, depth_est, 
             garg_crop=self.hparams.garg_crop, eigen_crop=self.hparams.eigen_crop, 
             dataset=self.hparams.dataset,
@@ -110,7 +89,7 @@ class PL_DepthTrainer(L.LightningModule):
             mask = depth_gt > 1.0
         
         loss = self.criterion(depth_est, depth_gt, mask.bool())
-        silog, abs_rel, log10, rms, sq_rel, log_rms, d1, d2, d3 = compute_metrics(
+        silog, abs_rel, log10, rms, sq_rel, log_rms, d1, d2, d3 = compute_depth_metrics(
             depth_gt, depth_est, 
             garg_crop=self.hparams.garg_crop, eigen_crop=self.hparams.eigen_crop, 
             dataset=self.hparams.dataset,
@@ -121,15 +100,15 @@ class PL_DepthTrainer(L.LightningModule):
             'test/d1': d1, 'test/d2': d2, 'test/d3': d3,
             'test/abs_rel': abs_rel, 'test/rms': rms, 'test/log10': log10,
             'test/silog': silog, 'test/sq_rel': sq_rel, 'test/log_rms': log_rms,
-        }, on_epoch=True, sync_dist=True, batch_size=image.size(0), logger=False)
+        }, on_epoch=True, sync_dist=True, batch_size=image.size(0))
 
     def on_train_epoch_end(self):
         pass
 
     def on_validation_epoch_end(self):
         self.depth_gt = torch.where(self.depth_gt < 1e-3, self.depth_gt * 0 + 1e3, self.depth_gt)
-        self.logger.experiment.add_image('valid_viz/depth_gt', normalize_result(1 / self.depth_gt[0, :, :, :].data), self.global_step)
-        self.logger.experiment.add_image('valid_viz/depth_est', normalize_result(1 / self.depth_est[0, :, :, :].data), self.global_step)
+        self.logger.experiment.add_image('valid_viz/depth_gt', normalize_depth_result(1 / self.depth_gt[0, :, :, :].data), self.global_step)
+        self.logger.experiment.add_image('valid_viz/depth_est', normalize_depth_result(1 / self.depth_est[0, :, :, :].data), self.global_step)
         self.logger.experiment.add_image('valid_viz/image', inv_normalize(self.image[0, :, :, :]).data, self.global_step)
 
     def on_test_epoch_end(self):
