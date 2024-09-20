@@ -46,11 +46,16 @@ class ADE20KSegmentation(BaseDataset):
             img = self.transform(img)
         if self.target_transform is not None:
             mask = self.target_transform(mask)
-        return img, mask
+        return {
+            'image': img,
+            'mask': mask,
+        }
 
     def _mask_transform(self, mask):
         target = np.array(mask).astype('int64') - 1
-        return torch.from_numpy(target)
+        target = torch.from_numpy(target)
+        target[target < 0] = self.NUM_CLASS
+        return target
 
     def __len__(self):
         return len(self.images)

@@ -1,2 +1,4 @@
 **/__pycache__
 /lightning_logs
+/_lightning_logs
+*.ipynb

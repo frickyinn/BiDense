@@ -90,10 +90,10 @@ class BiSRConv2d_Down(nn.Module):
         assert out_channels / in_channels == 2
         super(BiSRConv2d_Down, self).__init__()
 
-        self.biconv_1 = BiSRConv2d(in_channels, out_channels, kernel_size, stride, padding, bias, groups)
-        self.biconv_2 = BiSRConv2d(in_channels, out_channels, kernel_size, stride, padding, bias, groups)
-        self.rprelu1 = RPReLU(out_channels)
-        self.rprelu2 = RPReLU(out_channels)
+        self.biconv_1 = BiSRConv2d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias, groups=groups)
+        self.biconv_2 = BiSRConv2d(in_channels, in_channels, kernel_size=kernel_size, stride=stride, padding=padding, bias=bias, groups=groups)
+        self.rprelu1 = RPReLU(in_channels)
+        self.rprelu2 = RPReLU(in_channels)
         self.avg_pool = nn.AvgPool2d(kernel_size=2, stride=2, padding=0)
 
     def forward(self, x):

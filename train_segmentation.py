@@ -20,10 +20,10 @@ def main(args):
         base_size=config.DATASET.BASE_SIZE,
         crop_size=config.DATASET.CROP_SIZE,
         batch_size=config.TRAINING.BATCH_SIZE_ON_1_GPU,
-        num_workers=config.TRAINING.NUM_THREADS,
+        num_threads=config.TRAINING.NUM_THREADS,
     )
     train_dataloader = get_dataLoader(mode='train', **dataloader_args)
-    valid_dataloader = get_dataLoader(mode='test', **dataloader_args)
+    valid_dataloader = get_dataLoader(mode='val', **dataloader_args)
     
     trainer_args = dict(
         model_type=config.MODEL.MODEL_TYPE,
@@ -31,7 +31,7 @@ def main(args):
         dataset=config.DATASET.DATASET,
         max_lr=config.TRAINING.MAX_LR,
         epochs=config.TRAINING.NUM_EPOCHS,
-        num_classes=config.DATASET.NUM_CLASSES,
+        num_classes=config.MODEL.NUM_CLASSES,
     )
     if args.weights is None:
         depth_trainer = PL_SegmentationTrainer(**trainer_args)
@@ -55,7 +55,7 @@ def main(args):
         max_epochs=config.TRAINING.NUM_EPOCHS, 
         callbacks=[lr_monitor, latest_checkpoint_callback, best_checkpoint_callback],
         precision='32',
-        check_val_every_n_epoch=config.ONLINE_EVAL.EVAL_FREQ,
+        check_val_every_n_epoch=config.TRAINING.EVAL_FREQ,
     )
     
     trainer.fit(depth_trainer, train_dataloader, valid_dataloader, ckpt_path=args.resume)

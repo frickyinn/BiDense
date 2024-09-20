@@ -106,17 +106,19 @@ def normalize_depth_result(value, vmin=None, vmax=None):
 
 @torch.no_grad()
 def compute_segmentation_metrics(mask_gt, mask_est, n_classes):
-    mask_est = torch.argmax(mask_est, dim=1, keepdim=True)
-    mask_gt, mask_est = mask_gt[mask_gt > 0], mask_est[mask_gt > 0]
+    mask_est = torch.argmax(mask_est, dim=1)
+    valid_mask = (mask_gt >= 0) * (mask_gt < n_classes)
+    mask_gt, mask_est = mask_gt[valid_mask], mask_est[valid_mask]
     pixAcc = (mask_gt == mask_est).float().mean()
-
+    
+    mask_gt, mask_est = mask_gt + 1, mask_est + 1
     inter = mask_est * (mask_est == mask_gt)
-    area_inter = torch.histogram(inter, bins=n_classes-1, range=(1, n_classes-1))
-    area_est = torch.histogram(mask_est, bins=n_classes-1, range=(1, n_classes-1))
-    area_gt = torch.histogram(mask_gt, bins=n_classes-1, range=(1, n_classes-1))
+    area_inter, _ = torch.histogram(inter.float().cpu(), bins=n_classes, range=(1, n_classes+1))
+    area_est, _ = torch.histogram(mask_est.float().cpu(), bins=n_classes, range=(1, n_classes+1))
+    area_gt, _ = torch.histogram(mask_gt.float().cpu(), bins=n_classes, range=(1, n_classes+1))
 
     area_union = area_est + area_gt - area_inter
-    return pixAcc, area_inter, area_union
+    return pixAcc.to(mask_gt.device), area_inter.to(mask_gt.device), area_union.to(mask_gt.device)
 
 
 ADE20K_PALETTE = [
@@ -134,17 +136,18 @@ ADE20K_PALETTE = [
     (0, 214, 255), (255, 0, 112), (92, 255, 0), (0, 224, 255), (112, 224, 255), (70, 184, 160), (163, 0, 255), (153, 0, 255), (71, 255, 0), (255, 0, 163), 
     (255, 204, 0), (255, 0, 143), (0, 255, 235), (133, 255, 0), (255, 0, 235), (245, 0, 255), (255, 0, 122), (255, 245, 0), (10, 190, 212), (214, 255, 0), 
     (0, 204, 255), (20, 0, 255), (255, 255, 0), (0, 153, 255), (0, 41, 255), (0, 255, 204), (41, 0, 255), (41, 255, 0), (173, 0, 255), (0, 245, 255), 
-    (71, 0, 255), (122, 0, 255), (0, 255, 184), (0, 92, 255), (184, 255, 0), (0, 133, 255), (255, 214, 0), (25, 194, 194), (102, 255, 0), (92, 0, 255)
+    (71, 0, 255), (122, 0, 255), (0, 255, 184), (0, 92, 255), (184, 255, 0), (0, 133, 255), (255, 214, 0), (25, 194, 194), (102, 255, 0), (92, 0, 255),
+    (0, 0, 0),
 ]
 
 
 def visualize_segmentation_result(mask, dataset):
-    # mask: (C, H, W)
-    _, H, W = mask.shape
+    # mask: (H, W)
+    H, W = mask.shape
 
     if dataset == 'ade20k':
         palette = ADE20K_PALETTE
     
-    palette = torch.Tensor(palette, device=mask.device)
-    colorized = torch.index_select(mask.argmax(0).reshape(-1), 0, palette).reshape(H, W, 3)
-    return colorized
+    palette = torch.Tensor(palette)
+    colorized = torch.index_select(palette, 0, mask.view(-1).cpu()).reshape(H, W, 3).permute(2, 0, 1) / 255.
+    return colorized.to(mask.device)
