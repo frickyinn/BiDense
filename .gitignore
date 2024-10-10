@@ -2,3 +2,4 @@
 /lightning_logs
 /_lightning_logs
 *.ipynb
+/ade20k_result

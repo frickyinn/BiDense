@@ -76,7 +76,8 @@ class DataLoadPreprocess(Dataset):
         else:
             with open(filenames_file, 'r') as f:
                 self.filenames = f.readlines()
-    
+
+        self.filenames = [x for x in self.filenames if 'None' not in x]
         self.mode = mode
         self.transform = transform
         self.to_tensor = ToTensor

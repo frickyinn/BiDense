@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torchvision.transforms.functional import resize
 
 from .backbones.vit import dinov2_vits14
 
@@ -24,10 +25,6 @@ def _make_scratch(in_shape, out_shape, groups=1, expand=False):
     scratch.layer4_rn = nn.Conv2d(in_shape[3], out_shape4, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
 
     return scratch
-
-
-def _make_fusion_block(features, use_bn):
-    return FeatureFusionBlock(features, bn=use_bn)
 
 
 class ResidualConvUnit(nn.Module):
@@ -74,12 +71,13 @@ class FeatureFusionBlock(nn.Module):
     
 
 class DPT(nn.Module):
-    def __init__(self, head, in_channels, features=256, use_bn=False, out_channels=[256, 512, 1024, 1024], use_clstoken=False):
+    def __init__(self, head, features=256, use_bn=False, out_channels=[48, 96, 192, 384], use_clstoken=False):
         super(DPT, self).__init__()
 
         self.use_clstoken = use_clstoken
 
         self.backbone = dinov2_vits14(pretrained=True)
+        in_channels = self.backbone.blocks[0].attn.qkv.in_features
 
         self.projects = nn.ModuleList([
             nn.Conv2d(in_channels=in_channels, out_channels=out_channel, kernel_size=1, stride=1, padding=0) 
@@ -105,18 +103,19 @@ class DPT(nn.Module):
 
         self.scratch.stem_transpose = None
 
-        self.scratch.refinenet1 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet2 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet3 = _make_fusion_block(features, use_bn)
-        self.scratch.refinenet4 = _make_fusion_block(features, use_bn)
+        self.scratch.refinenet1 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet2 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet3 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet4 = FeatureFusionBlock(features, use_bn)
 
         self.scratch.output_conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
         self.scratch.output_conv2 = head
 
     def forward(self, x):
         h, w = x.shape[-2:]
-        patch_h, patch_w = h // 14, w // 14
+        patch_h, patch_w = (h // 28) * 2, (w // 28) * 2
 
+        x = resize(x, (patch_h * 14, patch_w * 14))
         out_features = self.backbone.get_intermediate_layers(x, 4, return_class_token=True)
 
         out = []
@@ -155,33 +154,24 @@ class DPT(nn.Module):
 
 
 class DPTDepthModel(DPT):
-    def __init__(self, non_negative=True, scale=1.0, shift=0.0, invert=True, **kwargs):
+    def __init__(self, max_depth, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
-
-        self.scale = scale
-        self.shift = shift
-        self.invert = invert
+        self.max_depth = max_depth
 
         head = nn.Sequential(
             nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
             nn.ReLU(True),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(True) if non_negative else nn.Identity(),
+            nn.Sigmoid()
         )
 
         super().__init__(head, **kwargs)
 
     def forward(self, x):
-        inv_depth = super().forward(x)
+        depth = super().forward(x) * self.max_depth
 
-        if self.invert:
-            depth = self.scale * inv_depth + self.shift
-            depth[depth < 1e-8] = 1e-8
-            depth = 1.0 / depth
-            return depth
-        else:
-            return inv_depth
+        return depth
 
 
 class DPTSegmentationModel(DPT):
@@ -191,9 +181,11 @@ class DPTSegmentationModel(DPT):
         kwargs["use_bn"] = True
 
         head = nn.Sequential(
+            nn.Conv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features // 2),
             nn.ReLU(True),
             nn.Conv2d(features // 2, num_classes, kernel_size=1),
         )
 
         super().__init__(head, **kwargs)
+        
