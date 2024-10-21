@@ -3,3 +3,4 @@
 /_lightning_logs
 *.ipynb
 /ade20k_result
+/kitti_results

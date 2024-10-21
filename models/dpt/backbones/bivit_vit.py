@@ -7,7 +7,7 @@ from torch.nn.init import trunc_normal_
 from enum import Enum
 from typing import Union, Callable
 
-from binary.bibert import BinaryLinear, BinaryQuantizer, ZMeanBinaryQuantizer
+from binary.bivit import BinaryLinear_adapscaling, BinaryLinear_STE, BinaryQuantizer, SoftmaxBinaryQuantizer
 
 
 class Mlp(nn.Module):
@@ -15,9 +15,9 @@ class Mlp(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = BinaryLinear(in_features, hidden_features, bias=bias)
+        self.fc1 = BinaryLinear_STE(in_features, hidden_features, bias=bias)
         self.act = nn.GELU()
-        self.fc2 = BinaryLinear(hidden_features, out_features, bias=bias)
+        self.fc2 = BinaryLinear_STE(hidden_features, out_features, bias=bias)
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
@@ -76,24 +76,27 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = BinaryLinear(dim, dim * 3, bias=qkv_bias)
-        self.act_quantizer = BinaryQuantizer
-        self.attn_quantizer = ZMeanBinaryQuantizer
+        self.qkv = BinaryLinear_adapscaling(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         
-        self.proj = BinaryLinear(dim, dim, bias=proj_bias)
+        self.proj = BinaryLinear_adapscaling(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
+
+        self.quant_layer = BinaryQuantizer().apply
+        self.attn_quant_layer = SoftmaxBinaryQuantizer().apply
 
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
 
         q, k, v = qkv[0], qkv[1], qkv[2]
-        q, k, v = map(self.act_quantizer.apply, (q, k, v))
+        binary_qkv = self.quant_layer(qkv)
+        q, k, v = binary_qkv.unbind(0)
 
         attn = q @ k.transpose(-2, -1) * self.scale
+        # attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
-        attn = self.attn_quantizer.apply(attn)
+        attn = self.attn_quant_layer(attn).float().detach() - attn.softmax(-1).detach() + attn.softmax(-1)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)

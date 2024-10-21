@@ -7,7 +7,7 @@ from torch.nn.init import trunc_normal_
 from enum import Enum
 from typing import Union, Callable
 
-from binary.bibert import BinaryLinear, BinaryQuantizer, ZMeanBinaryQuantizer
+from binary.bit import BinaryLinear, act_quant_fn, AlphaInit
 
 
 class Mlp(nn.Module):
@@ -77,23 +77,29 @@ class Attention(nn.Module):
         self.scale = head_dim**-0.5
 
         self.qkv = BinaryLinear(dim, dim * 3, bias=qkv_bias)
-        self.act_quantizer = BinaryQuantizer
-        self.attn_quantizer = ZMeanBinaryQuantizer
         self.attn_drop = nn.Dropout(attn_drop)
         
         self.proj = BinaryLinear(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
+
+        self.clip_query = AlphaInit(torch.tensor(1.0))
+        self.clip_key = AlphaInit(torch.tensor(1.0))
+        self.clip_value = AlphaInit(torch.tensor(1.0))
+        self.clip_attn = AlphaInit(torch.tensor(1.0))
 
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
 
         q, k, v = qkv[0], qkv[1], qkv[2]
-        q, k, v = map(self.act_quantizer.apply, (q, k, v))
+        q = act_quant_fn(q, clip_val=self.clip_query, num_bits=1, symmetric=True, quant_method='elastic', layerwise=True)
+        k = act_quant_fn(q, clip_val=self.clip_key, num_bits=1, symmetric=True, quant_method='elastic', layerwise=True)
+        v = act_quant_fn(q, clip_val=self.clip_value, num_bits=1, symmetric=True, quant_method='elastic', layerwise=True)
 
         attn = q @ k.transpose(-2, -1) * self.scale
+        attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
-        attn = self.attn_quantizer.apply(attn)
+        attn = act_quant_fn(attn, clip_val=self.clip_attn, num_bits=1, symmetric=False, quant_method='elastic', layerwise=True)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)

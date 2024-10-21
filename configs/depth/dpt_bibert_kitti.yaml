@@ -30,5 +30,5 @@ ONLINE_EVAL:
 
 MODEL:
   MODEL_TYPE: 'dpt'
-  BINARY_TYPE: 'fp32'
+  BINARY_TYPE: 'bibert'
   MAX_DEPTH: 80

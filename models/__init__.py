@@ -1,4 +1,10 @@
-from .dpt import DPTDepthModel, DPTSegmentationModel
+from .dpt import (
+    DPTDepthModel, DPTSegmentationModel,
+    BiBertDPTDepthModel, BiBertDPTSegmentationModel,
+    BiTDPTDepthModel, BiTDPTSegmentationModel,
+    BiViTDPTDepthModel, BiViTDPTSegmentationModel,
+    BiDenseDPTDepthModel, BiDenseDPTSegmentationModel,
+)
 from .upernet import (
     UperNetDepthModel, UperNetSegmentationModel,
     BnnUperNetDepthModel, BnnUperNetSegmentationModel,
@@ -13,6 +19,10 @@ from .upernet import (
 DEPTH_MODEL_DICT = {
     'dpt': {
         'fp32': DPTDepthModel,
+        'bibert': BiBertDPTDepthModel,
+        'bit': BiTDPTDepthModel,
+        'bivit': BiViTDPTDepthModel,
+        'bidense': BiDenseDPTDepthModel,
     },
 
     'upernet': {
@@ -30,6 +40,10 @@ DEPTH_MODEL_DICT = {
 SEGMENTATION_MODEL_DICT = {
     'dpt': {
         'fp32': DPTSegmentationModel,
+        'bibert': BiBertDPTSegmentationModel,
+        'bit': BiTDPTSegmentationModel,
+        'bivit': BiViTDPTSegmentationModel,
+        'bidense': BiDenseDPTSegmentationModel,
     },
 
     'upernet': {
