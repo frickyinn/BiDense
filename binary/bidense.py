@@ -52,7 +52,7 @@ class ValueAdaptiveBinarizer(nn.Module):
 
     def forward(self, x):
         x = x - (self.k * self.avg_pool(x.detach()) + self.b)
-        x = torch.exp(self.alpha * self.avg_pool(x.detach().abs())) * self.binarizer(x)
+        x = torch.exp(self.alpha * (self.avg_pool(x.detach().abs()) - 1)) * self.binarizer(x)
         return x
     
 

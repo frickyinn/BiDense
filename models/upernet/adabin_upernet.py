@@ -83,7 +83,8 @@ class UperNet(nn.Module):
         self.PPN = PSPModule(feature_channels[-1])
         self.FPN = FPN_fuse(feature_channels, fpn_out=fpn_out)
 
-        self.out_conv1 = nn.Conv2d(fpn_out, features // 2, kernel_size=3, stride=1, padding=1)
+        self.out_conv1 = AdaBinConv2d(fpn_out, features // 2, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(features // 2)
         self.out_conv2 = head
 
     def forward(self, x):
@@ -95,6 +96,7 @@ class UperNet(nn.Module):
         
         x = self.FPN(features)
         x = self.out_conv1(x)
+        x = self.norm(x)
         x = F.interpolate(x, (H, W), mode="bilinear", align_corners=True)
         x = self.out_conv2(x)
 
@@ -108,7 +110,8 @@ class AdaBinUperNetDepthModel(UperNet):
         self.max_depth = max_depth
 
         head = nn.Sequential(
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            AdaBinConv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             nn.Sigmoid()
@@ -128,7 +131,7 @@ class AdaBinUperNetSegmentationModel(UperNet):
         features = kwargs["features"] if "features" in kwargs else 256
 
         head = nn.Sequential(
-            nn.Conv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
+            AdaBinConv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
             nn.BatchNorm2d(features // 2),
             nn.ReLU(True),
             nn.Conv2d(features // 2, num_classes, kernel_size=1),

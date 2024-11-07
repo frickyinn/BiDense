@@ -29,5 +29,5 @@ ONLINE_EVAL:
 
 MODEL:
   MODEL_TYPE: 'upernet'
-  BINARY_TYPE: 'bisrnet'
+  BINARY_TYPE: 'test'
   MAX_DEPTH: 10

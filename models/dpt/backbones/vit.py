@@ -19,10 +19,14 @@ class Mlp(nn.Module):
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
+        _, c, d = x.shape
         x = self.fc1(x)
+        print(2 * self.fc1.in_features * self.fc1.out_features * c)
         x = self.act(x)
+        print(7 * self.fc1.out_features * c)
         x = self.drop(x)
         x = self.fc2(x)
+        print(2 * self.fc2.in_features * self.fc2.out_features * c)
         x = self.drop(x)
         return x
 
@@ -62,6 +66,7 @@ class PatchEmbed(nn.Module):
         assert W % patch_W == 0, f"Input image width {W} is not a multiple of patch width: {patch_W}"
 
         x = self.proj(x)  # B C H W
+        print(2 * self.proj.in_channels * self.proj.kernel_size[0]**2 * self.proj.out_channels * x.size(-1) * x.size(-2))
         H, W = x.size(2), x.size(3)
         x = x.flatten(2).transpose(1, 2)  # B HW C
         return x
@@ -82,15 +87,22 @@ class Attention(nn.Module):
     def forward(self, x):
         B, N, C = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        print(2 * self.qkv.in_features * self.qkv.out_features * N)
 
         q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
+        _, head, n, c = q.shape
+        print(head * n * c)
         attn = q @ k.transpose(-2, -1)
+        print(head * n * c * n)
 
         attn = attn.softmax(dim=-1)
+        print(2 * n * n + n * (n - 1))
         attn = self.attn_drop(attn)
 
         x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        print(head * n * n * c)
         x = self.proj(x)
+        print(head * c * c * n)
         x = self.proj_drop(x)
         return x
     
@@ -120,6 +132,8 @@ class Block(nn.Module):
     def forward(self, x):
         x = x + self.ls1(self.attn(self.norm1(x)))
         x = x + self.ls2(self.mlp(self.norm2(x)))
+        B, N, C = x.shape
+        print(2 * (N * C + N * C + 2 * N * C))
 
         return x
 
@@ -212,6 +226,7 @@ class VisionTransformer(nn.Module):
 
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
         x = x + self.interpolate_pos_encoding(x, w, h)
+        print(nc * w * h)
 
         return x
 
@@ -264,6 +279,7 @@ class VisionTransformer(nn.Module):
     
         if norm:
             outputs = [self.norm(out) for out in outputs]
+            print(sum([out.size(-1) * out.size(-2) for out in outputs]))
         class_tokens = [out[:, 0] for out in outputs]
         outputs = [out[:, 1:] for out in outputs]
         if reshape:

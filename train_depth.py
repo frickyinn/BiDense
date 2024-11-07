@@ -81,7 +81,7 @@ def main(args):
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='.yaml configure file path')
-    parser.add_argument('--gpus', type=str, default='0,1')
+    parser.add_argument('--gpus', type=str, default='0,1,2,3')
     parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--weights', type=str, default=None)
 

@@ -42,13 +42,17 @@ class ResidualConvUnit(nn.Module):
     def forward(self, x):
         out = self.relu(x)
         out = self.conv1(out)
+        print(2 * self.conv1.in_channels * self.conv1.kernel_size[0]**2 * self.conv1.out_channels * out.size(-1) * out.size(-2))
         if self.bn == True:
             out = self.bn1(out)
+            print(2 * self.conv1.out_channels * out.size(-1) * out.size(-2))
 
         out = self.relu(out)
         out = self.conv2(out)
+        print(2 * self.conv2.in_channels * self.conv2.kernel_size[0]**2 * self.conv2.out_channels * out.size(-1) * out.size(-2))
         if self.bn == True:
             out = self.bn2(out)
+            print(2 * self.conv2.out_channels * out.size(-1) * out.size(-2))
 
         return out + x
 
@@ -64,6 +68,7 @@ class FeatureFusionBlock(nn.Module):
         output = xs[0]
         if len(xs) == 2:
             output += self.resConfUnit1(xs[1])
+            print(output.size(-3) * output.size(-1) * output.size(-2))
         output = self.resConfUnit2(output)
         output = nn.functional.interpolate(output, scale_factor=2, mode="bilinear", align_corners=True)
 
@@ -124,13 +129,17 @@ class DPT(nn.Module):
                 x, cls_token = x[0], x[1]
                 readout = cls_token.unsqueeze(1).expand_as(x)
                 x = self.readout_projects[i](torch.cat((x, readout), -1))
+                print(2 * self.readout_projects[i].in_features * self.readout_projects[i].out_features * x.size(-2))
             else:
                 x = x[0]
             
             x = x.permute(0, 2, 1).reshape((x.shape[0], x.shape[-1], patch_h, patch_w))
             
             x = self.projects[i](x)
+            print(2 * self.projects[i].in_channels * self.projects[i].kernel_size[0]**2 * self.projects[i].out_channels * x.size(-1) * x.size(-2))
             x = self.resize_layers[i](x)
+            if i != 2:
+                print(2 * self.resize_layers[i].in_channels * self.resize_layers[i].kernel_size[0]**2 * self.resize_layers[i].out_channels * x.size(-1) * x.size(-2))
             
             out.append(x)
         
@@ -140,6 +149,10 @@ class DPT(nn.Module):
         layer_2_rn = self.scratch.layer2_rn(layer_2)
         layer_3_rn = self.scratch.layer3_rn(layer_3)
         layer_4_rn = self.scratch.layer4_rn(layer_4)
+        print(2 * self.scratch.layer1_rn.in_channels * self.scratch.layer1_rn.kernel_size[0]**2 * self.scratch.layer1_rn.out_channels * layer_1_rn.size(-1) * layer_1_rn.size(-2))
+        print(2 * self.scratch.layer2_rn.in_channels * self.scratch.layer2_rn.kernel_size[0]**2 * self.scratch.layer2_rn.out_channels * layer_2_rn.size(-1) * layer_2_rn.size(-2))
+        print(2 * self.scratch.layer3_rn.in_channels * self.scratch.layer3_rn.kernel_size[0]**2 * self.scratch.layer3_rn.out_channels * layer_3_rn.size(-1) * layer_3_rn.size(-2))
+        print(2 * self.scratch.layer4_rn.in_channels * self.scratch.layer4_rn.kernel_size[0]**2 * self.scratch.layer4_rn.out_channels * layer_4_rn.size(-1) * layer_4_rn.size(-2))
 
         path_4 = self.scratch.refinenet4(layer_4_rn)
         path_3 = self.scratch.refinenet3(path_4, layer_3_rn)
@@ -147,9 +160,15 @@ class DPT(nn.Module):
         path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
 
         out = self.scratch.output_conv1(path_1)
+        print(2 * self.scratch.output_conv1.in_channels * self.scratch.output_conv1.kernel_size[0]**2 * self.scratch.output_conv1.out_channels * out.size(-1) * out.size(-2))
         out = F.interpolate(out, (h, w), mode="bilinear", align_corners=True)
         out = self.scratch.output_conv2(out)
+        print(2 * 128 * 3**2 * 128 * out.size(-1) * out.size(-2))
+        print(2 * 128 * out.size(-1) * out.size(-2))
+        print(2 * 128 * 1**2 * 150 * out.size(-1) * out.size(-2))
 
+        import pdb
+        pdb.set_trace()
         return out
 
 

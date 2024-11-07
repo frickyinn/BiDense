@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from binary.bidense import BiDenseConv2d, LearnableBias
-from .backbones.bidense_convnext import get_convnext
+from .backbones.fp32_convnext import get_convnext
 
 
 def up_and_add(x, y):
@@ -18,18 +17,18 @@ class PSPModule(nn.Module):
         out_channels = in_channels // len(bin_sizes)
         self.stages = nn.ModuleList([self._make_stages(in_channels, out_channels, b_s) for b_s in bin_sizes])
         self.bottleneck = nn.Sequential(
-            BiDenseConv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
-            LearnableBias(out_channel if out_channel else in_channels),
-            nn.PReLU(out_channel if out_channel else in_channels),
+            nn.Conv2d(in_channels + (out_channels * len(bin_sizes)), out_channel if out_channel else in_channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(out_channel if out_channel else in_channels),
+            nn.ReLU(inplace=True),
             nn.Dropout2d(0.1)
         )
 
     def _make_stages(self, in_channels, out_channels, bin_sz):
         prior = nn.AdaptiveAvgPool2d(output_size=bin_sz)
-        conv = BiDenseConv2d(in_channels, out_channels, kernel_size=1, bias=False)
-        move = LearnableBias(out_channels)
-        prelu = nn.PReLU(out_channels)
-        return nn.Sequential(prior, conv, move, prelu)
+        conv = nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False)
+        bn = nn.BatchNorm2d(out_channels)
+        relu = nn.ReLU(inplace=True)
+        return nn.Sequential(prior, conv, bn, relu)
 
     def forward(self, features):
         h, w = features.size()[2], features.size()[3]
@@ -37,25 +36,30 @@ class PSPModule(nn.Module):
         pyramids.extend([F.interpolate(stage(features), size=(h, w), mode='bilinear', align_corners=True) for stage in self.stages])
         output = self.bottleneck(torch.cat(pyramids, dim=1))
         return output
-     
+    
 
 class FPN_fuse(nn.Module):
     def __init__(self, feature_channels=[256, 512, 1024, 2048], fpn_out=256):
         super(FPN_fuse, self).__init__()
         assert feature_channels[0] == fpn_out
-        self.conv1x1 = nn.ModuleList([BiDenseConv2d(ft_size, fpn_out, kernel_size=1) for ft_size in feature_channels[1:]])
-        self.smooth_conv = nn.ModuleList([BiDenseConv2d(fpn_out, fpn_out, kernel_size=3, padding=1)] * (len(feature_channels) - 1))
+        self.conv1x1 = nn.ModuleList([nn.Sequential(
+            nn.Conv2d(ft_size, fpn_out, kernel_size=1),
+            nn.BatchNorm2d(fpn_out),
+        ) for ft_size in feature_channels[1:]])
+        self.smooth_conv = nn.ModuleList([nn.Sequential(
+            nn.Conv2d(fpn_out, fpn_out, kernel_size=3, padding=1),
+            nn.BatchNorm2d(fpn_out),
+        )] * (len(feature_channels) - 1))
         self.conv_fusion = nn.Sequential(
-            BiDenseConv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
-            LearnableBias(fpn_out),
-            nn.PReLU(fpn_out),
-            LearnableBias(fpn_out),
+            nn.Conv2d(len(feature_channels) * fpn_out, fpn_out, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(fpn_out),
+            nn.ReLU(inplace=True)
         )
 
     def forward(self, features):
         features[1:] = [conv1x1(feature) for feature, conv1x1 in zip(features[1:], self.conv1x1)]
         P = [up_and_add(features[i], features[i - 1]) for i in reversed(range(1, len(features)))]
-        P = [smooth_conv(x) for smooth_conv, x in zip(self.smooth_conv, P)]
+        P = [x + smooth_conv(x) for smooth_conv, x in zip(self.smooth_conv, P)]
         P = list(reversed(P))
         P.append(features[-1])  # P = [P1, P2, P3, P4]
         H, W = P[0].size(2), P[0].size(3)
@@ -78,7 +82,8 @@ class UperNet(nn.Module):
         self.PPN = PSPModule(feature_channels[-1])
         self.FPN = FPN_fuse(feature_channels, fpn_out=fpn_out)
 
-        self.out_conv1 = BiDenseConv2d(fpn_out, features // 2, kernel_size=3, stride=1, padding=1)
+        self.out_conv1 = nn.Conv2d(fpn_out, features // 2, kernel_size=3, stride=1, padding=1)
+        self.norm = nn.BatchNorm2d(features // 2)
         self.out_conv2 = head
 
     def forward(self, x):
@@ -90,20 +95,22 @@ class UperNet(nn.Module):
         
         x = self.FPN(features)
         x = self.out_conv1(x)
+        x = self.norm(x)
         x = F.interpolate(x, (H, W), mode="bilinear", align_corners=True)
         x = self.out_conv2(x)
 
         return x
 
 
-class BiDenseUperNetDepthModel(UperNet):
+class FP32UperNetDepthModel(UperNet):
     def __init__(self, max_depth, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
         self.max_depth = max_depth
 
         head = nn.Sequential(
-            BiDenseConv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             nn.Sigmoid()
@@ -117,14 +124,14 @@ class BiDenseUperNetDepthModel(UperNet):
         return depth
 
 
-class BiDenseUperNetSegmentationModel(UperNet):
+class FP32UperNetSegmentationModel(UperNet):
     def __init__(self, num_classes, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
 
         head = nn.Sequential(
-            BiDenseConv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
-            # nn.BatchNorm2d(features // 2),
+            nn.Conv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features // 2),
             nn.ReLU(True),
             nn.Conv2d(features // 2, num_classes, kernel_size=1),
         )

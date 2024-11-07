@@ -1,6 +1,5 @@
 import argparse
 import lightning as L
-from lightning.pytorch.callbacks import LearningRateMonitor, ModelCheckpoint
 
 from configs.segmentation.default import get_cfg_defaults
 from misc import seed_torch
@@ -22,25 +21,24 @@ def main(args):
         batch_size=config.TRAINING.BATCH_SIZE_ON_1_GPU,
         num_threads=config.TRAINING.NUM_THREADS,
     )
-    test_dataloader = get_dataLoader(mode='test', **dataloader_args)
-    depth_trainer = PL_SegmentationTrainer.load_from_checkpoint(args.ckpt_path)
+    test_dataloader = get_dataLoader(mode='val', **dataloader_args)
+    segmentation_trainer = PL_SegmentationTrainer.load_from_checkpoint(args.ckpt_path)
     
     devices = [int(x) for x in args.gpus.split(',')]
-
     trainer = L.Trainer(
         accelerator='gpu',
         devices=devices,
         precision='32',
     )
     
-    trainer.test(depth_trainer, test_dataloader)
+    trainer.test(segmentation_trainer, test_dataloader)
 
 
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('config', type=str, help='.yaml configure file path')
     parser.add_argument('ckpt_path', type=str)
-    parser.add_argument('--gpus', type=str, default='0,1')
+    parser.add_argument('--gpus', type=str, default='0')
 
     return parser
 

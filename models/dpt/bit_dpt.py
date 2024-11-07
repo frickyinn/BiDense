@@ -178,7 +178,7 @@ class BiTDPTSegmentationModel(DPT):
     def __init__(self, num_classes, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
-        kwargs["use_bn"] = True
+        # kwargs["use_bn"] = True
 
         head = nn.Sequential(
             nn.Conv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),

@@ -4,3 +4,6 @@
 *.ipynb
 /ade20k_result
 /kitti_results
+/ade20k_dpt_results
+/viz_tensor
+/qualitative_results

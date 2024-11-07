@@ -16,11 +16,11 @@ def get_dataLoader(mode, batch_size, num_threads, data_path, base_size, crop_siz
         return DataLoader(trainset, batch_size=batch_size, drop_last=True, shuffle=True, num_workers=num_threads, pin_memory=True)
     
     elif mode == 'val':
-        validset = ADE20KSegmentation(root=data_path, split=mode, mode =mode, **data_kwargs)
+        validset = ADE20KSegmentation(root=data_path, split=mode, mode=mode, **data_kwargs)
         return DataLoader(validset, batch_size=batch_size, shuffle=False, num_workers=num_threads, pin_memory=False)
     
     elif mode == 'test':
-        testset = ADE20KSegmentation(root=data_path, split=mode, mode =mode, **data_kwargs)
+        testset = ADE20KSegmentation(root=data_path, split=mode, mode=mode, **data_kwargs)
         return DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_threads, pin_memory=False)
 
     else:
