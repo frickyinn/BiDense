@@ -21,7 +21,7 @@ def main(args):
         batch_size=config.TRAINING.BATCH_SIZE_ON_1_GPU,
         num_threads=config.TRAINING.NUM_THREADS,
     )
-    test_dataloader = get_dataLoader(mode='val', **dataloader_args)
+    test_dataloader = get_dataLoader(dataset=config.DATASET.DATASET, mode='val', **dataloader_args)
     segmentation_trainer = PL_SegmentationTrainer.load_from_checkpoint(args.ckpt_path)
     
     devices = [int(x) for x in args.gpus.split(',')]

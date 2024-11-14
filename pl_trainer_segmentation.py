@@ -17,13 +17,13 @@ class PL_SegmentationTrainer(L.LightningModule):
         super().__init__()
         self.module = SEGMENTATION_MODEL_DICT[model_type][binary_type](**kwargs)
         weigth = None
-        if dataset == 'ade20k':
+        if dataset == 'ade20k' or dataset == 'pascal_voc':
             weight = torch.ones(kwargs['num_classes'], dtype=torch.float32)
             weight[-1] = 0
         self.criterion = torch.nn.CrossEntropyLoss(weight=weight)
         
         self.save_hyperparameters()
-        self.n_classes = kwargs['num_classes'] - 1 if dataset == 'ade20k' else kwargs['num_classes']
+        self.n_classes = kwargs['num_classes'] - 1 if (dataset == 'ade20k' or dataset == 'pascal_voc') else kwargs['num_classes']
         self.train_total_inter, self.train_total_union = 0, 0
         self.valid_total_inter, self.valid_total_union = 0, 0
         self.test_total_inter, self.test_total_union = 0, 0

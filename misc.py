@@ -141,12 +141,20 @@ ADE20K_PALETTE = [
 ]
 
 
+PASCAL_VOC_PALETTE = [
+    (0, 0, 0), (128, 0, 0), (0, 128, 0), (128, 128, 0), (0, 0, 128), (128, 0, 128), (0, 128, 128), (128, 128, 128), (64, 0, 0), (192, 0, 0), (64, 128, 0),
+    (192, 128, 0), (64, 0, 128), (192, 0, 128), (64, 128, 128), (192, 128, 128), (0, 64, 0), (128, 64, 0), (0, 192, 0), (128, 192, 0), (0, 64, 128), (224,224,192)
+]
+
+
 def visualize_segmentation_result(mask, dataset):
     # mask: (H, W)
     H, W = mask.shape
 
     if dataset == 'ade20k':
         palette = ADE20K_PALETTE
+    elif dataset == 'pascal_voc':
+        palette = PASCAL_VOC_PALETTE
     
     palette = torch.Tensor(palette)
     colorized = torch.index_select(palette, 0, mask.view(-1).cpu()).reshape(H, W, 3).permute(2, 0, 1) / 255.

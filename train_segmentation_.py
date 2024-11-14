@@ -20,11 +20,11 @@ def main(args):
         data_path=config.DATASET.DATA_PATH,
         base_size=config.DATASET.BASE_SIZE,
         crop_size=config.DATASET.CROP_SIZE,
-        batch_size=config.TRAINING.BATCH_SIZE_ON_1_GPU,
+        batch_size=2,
         num_threads=config.TRAINING.NUM_THREADS,
     )
-    train_dataloader = get_dataLoader(mode='train', **dataloader_args)
-    valid_dataloader = get_dataLoader(mode='val', **dataloader_args)
+    train_dataloader = get_dataLoader(dataset=config.DATASET.DATASET, mode='train', **dataloader_args)
+    valid_dataloader = get_dataLoader(dataset=config.DATASET.DATASET, mode='val', **dataloader_args)
     
     trainer_args = dict(
         model_type=config.MODEL.MODEL_TYPE,
