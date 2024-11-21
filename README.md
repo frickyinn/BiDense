@@ -57,3 +57,25 @@ Evaluation:
 ```shell
 python test_segmentation.py configs/segmentation/{model}_{bnn}_{dataset}.yaml {path to .ckpt}
 ```
+
+## Acknowledgements
+In this repository, we have used code from the following repositories. We thank all the authors for sharing their excellent work:
+- [DPT](https://github.com/isl-org/DPT)
+- [BTS](https://github.com/cleinc/bts)
+- [DANet](https://github.com/junfu1115/DANet)
+- [BiBench](https://github.com/htqin/BiBench)
+- [BiViT](https://github.com/ThisisBillhe/BiViT)
+- [ReActNet](https://github.com/liuzechun/ReActNet)
+- [Depth Anything](https://github.com/LiheYoung/Depth-Anything)
+- etc.
+
+
+## Citation
+```
+@article{yin2024bidense,
+  title={BiDense: Binarization for Dense Prediction},
+  author={Yin, Rui and Qin, Haotong and Zhang, Yulun and Li, Wenbo and Guo, Yong and Zhu, Jianjun and Wang, Cheng and Jia, Biao},
+  journal={arXiv preprint arXiv:2411.10346},
+  year={2024},
+}
+```
