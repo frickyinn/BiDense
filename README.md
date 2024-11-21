@@ -1,5 +1,7 @@
 # BiDense: Binarization for Dense Prediction
-  
+
+[![arXiv](https://img.shields.io/badge/arXiv-2411.10346-red)](https://arxiv.org/abs/2411.10346)
+
 **BiDense**, a generalized **Bi**narization framework designed for efficient and accurate **Dense** prediction tasks. 
 
 <div align="center">
@@ -15,6 +17,13 @@ The DAB adaptively calculates thresholds and scaling factors for binarization, e
 Meanwhile, the CFB facilitates full-precision bypassing for binary convolutional layers undergoing various channel size transformations, which enhances the propagation of real-valued signals and minimizes information loss.
 By leveraging these techniques, BiDense preserves more real-valued information, enabling more accurate and detailed dense predictions in BNNs. 
 Extensive experiments demonstrate that our framework achieves performance levels comparable to full-precision models while significantly reducing memory usage and computational costs.
+
+## Results
+### Semantic Segmentation
+<img src="assets/ade20k.png" width=400>
+
+### Monocular Depth Estimation
+<img src="assets/depth.png" width=800>
 
 ## Dependencies
 - `torch`: tested on v2.1.2+cu118
