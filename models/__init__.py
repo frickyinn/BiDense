@@ -1,13 +1,14 @@
 from .dpt import (
-    # DPTDepthModel, DPTSegmentationModel,
+    DPTDepthModel, DPTSegmentationModel,
+    FP32DPTDepthModel, FP32DPTSegmentationModel,
     # BiBertDPTDepthModel, BiBertDPTSegmentationModel,
     # BiTDPTDepthModel, BiTDPTSegmentationModel,
     # BiViTDPTDepthModel, BiViTDPTSegmentationModel,
     BiDenseDPTDepthModel, BiDenseDPTSegmentationModel,
 )
 from .upernet import (
-    # UperNetDepthModel, UperNetSegmentationModel,
-    # FP32UperNetDepthModel, FP32UperNetSegmentationModel,
+    UperNetDepthModel, UperNetSegmentationModel,
+    FP32UperNetDepthModel, FP32UperNetSegmentationModel,
     # BnnUperNetDepthModel, BnnUperNetSegmentationModel,
     # ReActUperNetDepthModel, ReActUperNetSegmentationModel,
     # AdaBinUperNetDepthModel, AdaBinUperNetSegmentationModel,
@@ -20,7 +21,8 @@ from .upernet import (
 
 DEPTH_MODEL_DICT = {
     'dpt': {
-        # 'fp32': DPTDepthModel,
+        'fp32': DPTDepthModel,
+        'fp32_0': FP32DPTDepthModel,
         # 'bibert': BiBertDPTDepthModel,
         # 'bit': BiTDPTDepthModel,
         # 'bivit': BiViTDPTDepthModel,
@@ -28,8 +30,8 @@ DEPTH_MODEL_DICT = {
     },
 
     'upernet': {
-        # 'fp32': UperNetDepthModel,
-        # 'fp32_0': FP32UperNetDepthModel,
+        'fp32': UperNetDepthModel,
+        'fp32_0': FP32UperNetDepthModel,
         # 'bnn': BnnUperNetDepthModel,
         # 'react': ReActUperNetDepthModel,
         # 'adabin': AdaBinUperNetDepthModel,
@@ -43,7 +45,8 @@ DEPTH_MODEL_DICT = {
 
 SEGMENTATION_MODEL_DICT = {
     'dpt': {
-        # 'fp32': DPTSegmentationModel,
+        'fp32': DPTSegmentationModel,
+        'fp32_0': FP32DPTSegmentationModel,
         # 'bibert': BiBertDPTSegmentationModel,
         # 'bit': BiTDPTSegmentationModel,
         # 'bivit': BiViTDPTSegmentationModel,
@@ -51,8 +54,8 @@ SEGMENTATION_MODEL_DICT = {
     },
 
     'upernet': {
-        # 'fp32': UperNetSegmentationModel,
-        # 'fp32_0': FP32UperNetSegmentationModel,
+        'fp32': UperNetSegmentationModel,
+        'fp32_0': FP32UperNetSegmentationModel,
         # 'bnn': BnnUperNetSegmentationModel,
         # 'react': ReActUperNetSegmentationModel,
         # 'adabin': AdaBinUperNetSegmentationModel,

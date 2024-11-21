@@ -7,8 +7,7 @@ from torch.nn.init import trunc_normal_
 from enum import Enum
 from typing import Union, Callable
 
-from binary.bidense import BinaryLinear, LearnableBias1D, ApproxSignBinarizer
-from binary.bivit import SoftmaxBinaryQuantizer
+from binary.bivit import BinaryLinear_adapscaling, BinaryLinear_STE, BinaryQuantizer, SoftmaxBinaryQuantizer
 
 
 class Mlp(nn.Module):
@@ -16,16 +15,14 @@ class Mlp(nn.Module):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
-        self.fc1 = BinaryLinear(in_features, hidden_features, bias=bias, bypass=False)
-        self.move = LearnableBias1D(hidden_features)
-        self.act = nn.PReLU(hidden_features)
-        self.fc2 = BinaryLinear(hidden_features, out_features, bias=bias, bypass=False)
+        self.fc1 = BinaryLinear_STE(in_features, hidden_features, bias=bias)
+        self.act = nn.GELU()
+        self.fc2 = BinaryLinear_STE(hidden_features, out_features, bias=bias)
         self.drop = nn.Dropout(drop)
 
     def forward(self, x):
         x = self.fc1(x)
-        x = self.move(x)
-        x = self.act(x.permute(0, 2, 1)).permute(0, 2, 1)
+        x = self.act(x)
         x = self.drop(x)
         x = self.fc2(x)
         x = self.drop(x)
@@ -79,29 +76,29 @@ class Attention(nn.Module):
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
 
-        self.qkv = BinaryLinear(dim, dim * 3, bias=qkv_bias, bypass=False)
+        self.qkv = BinaryLinear_adapscaling(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         
-        self.proj = BinaryLinear(dim, dim, bias=proj_bias, bypass=False)
+        self.proj = BinaryLinear_adapscaling(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
 
-        self.move = LearnableBias1D(dim * 3)
-        self.quant_layer = ApproxSignBinarizer()
+        self.quant_layer = BinaryQuantizer().apply
         self.attn_quant_layer = SoftmaxBinaryQuantizer().apply
 
     def forward(self, x):
         B, N, C = x.shape
+        qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
 
-        qkv = self.qkv(x)
-        binary_qkv = self.quant_layer(self.move(qkv)).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+        binary_qkv = self.quant_layer(qkv)
         q, k, v = binary_qkv.unbind(0)
 
         attn = q @ k.transpose(-2, -1) * self.scale
         # attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
         attn = self.attn_quant_layer(attn).float().detach() - attn.softmax(-1).detach() + attn.softmax(-1)
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
 
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x

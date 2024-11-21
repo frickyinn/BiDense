@@ -3,8 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torchvision.transforms.functional import resize
 
-from .backbones.bivit_vit import dinov2_vits14
-from binary.bidense import BiDenseConv2d, BiDenseConvTranspose2d, BinaryLinear, LearnableBias, channel_adaptive_bypass
+from .backbones.vit import dinov2_vits14
 
 
 def _make_scratch(in_shape, out_shape, groups=1, expand=False):
@@ -20,42 +19,46 @@ def _make_scratch(in_shape, out_shape, groups=1, expand=False):
         out_shape3 = out_shape * 4
         out_shape4 = out_shape * 8
 
-    scratch.layer1_rn = BiDenseConv2d(in_shape[0], out_shape1, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
-    scratch.layer2_rn = BiDenseConv2d(in_shape[1], out_shape2, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
-    scratch.layer3_rn = BiDenseConv2d(in_shape[2], out_shape3, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
-    scratch.layer4_rn = BiDenseConv2d(in_shape[3], out_shape4, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
+    scratch.layer1_rn = nn.Conv2d(in_shape[0], out_shape1, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
+    scratch.layer2_rn = nn.Conv2d(in_shape[1], out_shape2, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
+    scratch.layer3_rn = nn.Conv2d(in_shape[2], out_shape3, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
+    scratch.layer4_rn = nn.Conv2d(in_shape[3], out_shape4, kernel_size=3, stride=1, padding=1, bias=False, groups=groups)
 
     return scratch
 
 
 class ResidualConvUnit(nn.Module):
-    def __init__(self, features):
+    def __init__(self, features, bn):
         super().__init__()
 
-        self.conv1 = BiDenseConv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
-        self.conv2 = BiDenseConv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
-
-        self.prelu1 = nn.PReLU(features)
-        self.prelu2 = nn.PReLU(features)
-
-        self.move1 = LearnableBias(features)
-        self.move2 = LearnableBias(features)
+        self.bn = bn
+        self.conv1 = nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
+        self.conv2 = nn.Conv2d(features, features, kernel_size=3, stride=1, padding=1, bias=True)
+        if self.bn == True:
+            self.bn1 = nn.BatchNorm2d(features)
+            self.bn2 = nn.BatchNorm2d(features)
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        out = self.prelu1(self.move1(x))
+        out = self.relu(x)
         out = self.conv1(out)
-        out = self.prelu2(self.move2(out))
-        out = self.conv2(out)
+        if self.bn == True:
+            out = self.bn1(out)
 
-        return out
+        out = self.relu(out)
+        out = self.conv2(out)
+        if self.bn == True:
+            out = self.bn2(out)
+
+        return out + x
 
 
 class FeatureFusionBlock(nn.Module):
-    def __init__(self, features):
+    def __init__(self, features, bn):
         super(FeatureFusionBlock, self).__init__()
 
-        self.resConfUnit1 = ResidualConvUnit(features)
-        self.resConfUnit2 = ResidualConvUnit(features)
+        self.resConfUnit1 = ResidualConvUnit(features, bn)
+        self.resConfUnit2 = ResidualConvUnit(features, bn)
 
     def forward(self, *xs):
         output = xs[0]
@@ -67,30 +70,8 @@ class FeatureFusionBlock(nn.Module):
         return output
     
 
-class BiDenseUp(nn.Module):
-    def __init__(self, in_channels, out_channels, scale=2):
-        super(BiDenseUp, self).__init__()
-        self.conv = BiDenseConvTranspose2d(in_channels, out_channels, kernel_size=scale, stride=scale, padding=0, bypass=False)
-        self.out_channels = out_channels
-        self.scale = scale
-
-    def forward(self, x):
-        return self.conv(x) + channel_adaptive_bypass(F.interpolate(x, scale_factor=self.scale), self.out_channels)
-    
-
-class BiDenseDown(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super(BiDenseDown, self).__init__()
-        self.conv = BiDenseConv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bypass=False)
-        self.avgpool = nn.AvgPool2d(kernel_size=3, stride=2, padding=1)
-        self.out_channels = out_channels
-
-    def forward(self, x):
-        return self.conv(x) + channel_adaptive_bypass(self.avgpool(x), self.out_channels)
-    
-
 class DPT(nn.Module):
-    def __init__(self, head, features=256, out_channels=[48, 96, 192, 384], use_clstoken=False):
+    def __init__(self, head, features=256, use_bn=False, out_channels=[48, 96, 192, 384], use_clstoken=False):
         super(DPT, self).__init__()
 
         self.use_clstoken = use_clstoken
@@ -99,15 +80,15 @@ class DPT(nn.Module):
         in_channels = self.backbone.blocks[0].attn.qkv.in_features
 
         self.projects = nn.ModuleList([
-            BiDenseConv2d(in_channels=in_channels, out_channels=out_channel, kernel_size=1, stride=1, padding=0) 
+            nn.Conv2d(in_channels=in_channels, out_channels=out_channel, kernel_size=1, stride=1, padding=0) 
             for out_channel in out_channels
         ])
         
         self.resize_layers = nn.ModuleList([
-            BiDenseUp(in_channels=out_channels[0], out_channels=out_channels[0], scale=4),
-            BiDenseUp(in_channels=out_channels[1], out_channels=out_channels[1], scale=2),
+            nn.ConvTranspose2d(in_channels=out_channels[0], out_channels=out_channels[0], kernel_size=4, stride=4, padding=0),
+            nn.ConvTranspose2d(in_channels=out_channels[1], out_channels=out_channels[1], kernel_size=2, stride=2, padding=0),
             nn.Identity(),
-            BiDenseDown(in_channels=out_channels[3], out_channels=out_channels[3])
+            nn.Conv2d(in_channels=out_channels[3], out_channels=out_channels[3], kernel_size=3, stride=2, padding=1)
         ])
         
         if use_clstoken:
@@ -115,20 +96,20 @@ class DPT(nn.Module):
             for _ in range(len(self.projects)):
                 self.readout_projects.append(
                     nn.Sequential(
-                        BinaryLinear(2 * in_channels, in_channels),
-                        LearnableBias(in_channels),
-                        nn.PReLU(in_channels)))
+                        nn.Linear(2 * in_channels, in_channels),
+                        nn.GELU()))
         
         self.scratch = _make_scratch(out_channels, features, groups=1, expand=False)
 
         self.scratch.stem_transpose = None
 
-        self.scratch.refinenet1 = FeatureFusionBlock(features)
-        self.scratch.refinenet2 = FeatureFusionBlock(features)
-        self.scratch.refinenet3 = FeatureFusionBlock(features)
-        self.scratch.refinenet4 = FeatureFusionBlock(features)
+        self.scratch.refinenet1 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet2 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet3 = FeatureFusionBlock(features, use_bn)
+        self.scratch.refinenet4 = FeatureFusionBlock(features, use_bn)
 
-        self.scratch.output_conv1 = BiDenseConv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
+        self.scratch.output_conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
+        self.scratch.norm = nn.BatchNorm2d(features // 2)
         self.scratch.output_conv2 = head
 
     def forward(self, x):
@@ -167,20 +148,21 @@ class DPT(nn.Module):
         path_1 = self.scratch.refinenet1(path_2, layer_1_rn)
 
         out = self.scratch.output_conv1(path_1)
+        out = self.scratch.norm(out)
         out = F.interpolate(out, (h, w), mode="bilinear", align_corners=True)
         out = self.scratch.output_conv2(out)
-
         return out
 
 
-class BiDenseDPTDepthModel(DPT):
+class FP32DPTDepthModel(DPT):
     def __init__(self, max_depth, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
         self.max_depth = max_depth
 
         head = nn.Sequential(
-            BiDenseConv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+            nn.BatchNorm2d(32),
             nn.ReLU(True),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             nn.Sigmoid()
@@ -194,15 +176,15 @@ class BiDenseDPTDepthModel(DPT):
         return depth
 
 
-class BiDenseDPTSegmentationModel(DPT):
+class FP32DPTSegmentationModel(DPT):
     def __init__(self, num_classes, **kwargs):
 
         features = kwargs["features"] if "features" in kwargs else 256
-        # kwargs["use_bn"] = True
+        kwargs["use_bn"] = True
 
         head = nn.Sequential(
-            BiDenseConv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
-            # nn.BatchNorm2d(features // 2),
+            nn.Conv2d(features // 2, features // 2, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(features // 2),
             nn.ReLU(True),
             nn.Conv2d(features // 2, num_classes, kernel_size=1),
         )
